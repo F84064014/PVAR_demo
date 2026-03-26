@@ -1,0 +1,3 @@
+graido==6.10.0
+ultralytics==8.4.27
+onnxruntime==1.24.4

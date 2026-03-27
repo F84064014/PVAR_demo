@@ -28,7 +28,8 @@ GRUOPS = getGroup()
 
 DEMO_IMGS = [str(p) for p in (Path(__file__).parent.parent / 'samples' / 'par').glob('*')]
 
-DEMO_MODELS = list(map(str, (Path(__file__).parent.parent / 'models' / 'par').iterdir()))
+DEMO_MODELS = list(map(lambda s: str(s.name), (Path(__file__).parent.parent / 'models' / 'par').iterdir()))
+print(DEMO_MODELS)
 DEMO_MODEL = DEMO_MODELS[0]
 
 DRESS_COLOR = {

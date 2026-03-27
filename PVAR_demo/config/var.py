@@ -218,7 +218,7 @@ GRUOPS = getGroup()
 
 DEMO_IMGS = [str(p) for p in (Path(__file__).parent.parent / 'samples' / 'var').glob('*')]
 
-DEMO_MODELS = list(map(str, (Path(__file__).parent.parent / 'models' / 'var').iterdir()))
+DEMO_MODELS = list(map(lambda s: str(s.name), (Path(__file__).parent.parent / 'models' / 'var').iterdir()))
 DEMO_MODEL = DEMO_MODELS[0]
 
 VEHICLE_COLOR = {

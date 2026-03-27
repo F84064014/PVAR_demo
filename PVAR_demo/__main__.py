@@ -20,11 +20,15 @@ import PVAR_demo.plot as VPAR_plot
 
 ## Define Global Variables
 MODEL_ROOT  : Path = Path(__file__).parent / "models"
+MODEL_ROOT2 : Path = Path.cwd() / "demo_models"
 DETECTOR                            = None
 VAR_MODEL   : ort.InferenceSession  = None
 PAR_MODEL   : ort.InferenceSession  = None
 PAR_GALLERY_ITEMS : list            = PAR_CFG.DEMO_IMGS
 VAR_GALLERY_ITEMS : list            = VAR_CFG.DEMO_IMGS
+
+PAR_CFG.DEMO_MODELS.extend(list(map(lambda s: str(s.name), (MODEL_ROOT2 / "par").glob('*.onnx'))))
+VAR_CFG.DEMO_MODELS.extend(list(map(lambda s: str(s.name), (MODEL_ROOT2 / "var").glob('*.onnx'))))
 
 def load_detector():
     global DETECTOR
@@ -35,11 +39,12 @@ def load_detector():
 def load_var(force=False):
     global VAR_MODEL
     if force or VAR_MODEL is None:
-        path = MODEL_ROOT / "var" / VAR_CFG.DEMO_MODEL
+        path  = MODEL_ROOT  / "var" / VAR_CFG.DEMO_MODEL
         if not path.exists():
-            print(f"Model not found at {path}!!")
-        VAR_MODEL = ort.InferenceSession(MODEL_ROOT / "var" / VAR_CFG.DEMO_MODEL,
-                                         providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+            path = MODEL_ROOT2 / "var" / VAR_CFG.DEMO_MODEL
+            if not path.exists():
+                print(f"[ERROR] VAR Model {VAR_CFG.DEMO_MODEL} not found!!")
+        VAR_MODEL = ort.InferenceSession(str(path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
         print(f"[INFO] load model {path}")
 
 def load_par(force=False):
@@ -47,9 +52,10 @@ def load_par(force=False):
     if force or PAR_MODEL is None:
         path = MODEL_ROOT / "par" / PAR_CFG.DEMO_MODEL
         if not path.exists():
-            print(f"Model not found at {path}!!")
-        PAR_MODEL = ort.InferenceSession(MODEL_ROOT / "par" / PAR_CFG.DEMO_MODEL,
-                                         providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+            path = MODEL_ROOT2 / "par" / PAR_CFG.DEMO_MODEL
+            if not path.exists():
+                print(f"[ERROR] PAR Model {VAR_CFG.DEMO_MODEL} not found!!")
+        PAR_MODEL = ort.InferenceSession(str(path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
         print(f"[INFO] load model {path}")
 
 def run_var_inference(pil: Image, return_dict=True):
@@ -96,7 +102,7 @@ def run_video_inference(video_path: str, conf: float, rate: int, par: bool, var:
 
     N = rate # predict every N frame
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # mp4 編碼
-    out_path = f"temp/Video.PAR={PAR_CFG.DEMO_MODEL}.VAR={VAR_CFG.DEMO_MODEL}.mp4"
+    out_path = str(Path.cwd() / "PVAR_demo_video" / f"Video.PAR={PAR_CFG.DEMO_MODEL}.VAR={VAR_CFG.DEMO_MODEL}.mp4")
     Path(out_path).parent.mkdir(exist_ok=True)
     out = cv2.VideoWriter(out_path, fourcc, fps // N, (width, height))
 
@@ -193,7 +199,13 @@ def filter_group(preds, class_list):
 # ===== UI =====
 with gr.Blocks() as demo:
     gr.Markdown("## PVAR Classification Demo")
-    gr.Markdown("### Usage\n- 上傳圖片或從Gallery選取\n- 更換圖片就會更新預測結果(Video點擊process按鈕)\n- Video Inference 後會將crop直接更新到 PAR/VAR Gallery\n- ultralytics預設會下載 torch-cpu 有需要請更新 torch-gpu")
+    gr.Markdown("### Usage\n"
+                "- 上傳圖片或從Gallery選取\n"
+                "- 更換圖片就會更新預測結果(Video點擊process按鈕)")
+    gr.Markdown("### Hint\n"
+                "- 模型會從 [working_dir]/demo_models/par 跟 [working_dir]/demo_models/var 或是預設路徑讀取\n"
+                "- Video Inference 後會將crop直接更新到 PAR/VAR Gallery\n"
+                "- ultralytics預設會下載 torch-cpu 有需要請更新 torch-gpu")
 
     state = gr.State()
     par_model_input = gr.Dropdown(choices=PAR_CFG.DEMO_MODELS, label="選擇PAR模型", interactive=True)
@@ -272,5 +284,12 @@ with gr.Blocks() as demo:
                 video_btn.click(run_video_inference, inputs=video_inference_inputs, outputs=[video_output, par_gallery, var_gallery, crops_output])
 
 if __name__=="__main__":
-    # demo.launch(share=False, debug=True, server_port=7860, server_name="0.0.0.0")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--models", type=str, default='')
+    args = parser.parse_args()
+
+    if args.models:
+        MODEL_ROOT2 = args.models
+
     demo.launch(share=False)

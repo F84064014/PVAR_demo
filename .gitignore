@@ -1,8 +1,6 @@
 .gradio
 env
 temp
-*.onnx
-*.pt
 __pycache__
 PVAR_demo.zip
 *.egg-info

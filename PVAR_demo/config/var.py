@@ -218,12 +218,7 @@ GRUOPS = getGroup()
 
 DEMO_IMGS = [str(p) for p in Path("samples/var").glob('*')]
 
-DEMO_MODELS = [
-    "EMO.onnx",
-    "contras.onnx",
-    "var.onnx",
-    "mobile.onnx",
-]
+DEMO_MODELS = list(map(str, (Path(__file__).parent.parent.parent / 'models' / 'par').iterdir()))
 DEMO_MODEL = DEMO_MODELS[0]
 
 VEHICLE_COLOR = {

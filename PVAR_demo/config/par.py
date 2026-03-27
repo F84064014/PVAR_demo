@@ -28,10 +28,7 @@ GRUOPS = getGroup()
 
 DEMO_IMGS = [str(p) for p in Path("samples/par").glob('*')]
 
-DEMO_MODELS = [
-    "shufflenetv2_x1.0_finetune_v5.onnx",
-    "shufflenetv2_x1.0_finetune_v4.onnx",
-]
+DEMO_MODELS = list(map(str, (Path(__file__).parent.parent.parent / 'models' / 'par').iterdir()))
 DEMO_MODEL = DEMO_MODELS[0]
 
 DRESS_COLOR = {

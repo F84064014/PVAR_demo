@@ -19,7 +19,7 @@ import PVAR_demo.config.var as VAR_CFG
 import PVAR_demo.plot as VPAR_plot
 
 ## Define Global Variables
-MODEL_ROOT  : Path = Path(__file__).parent.parent / "models"
+MODEL_ROOT  : Path = Path(__file__).parent / "models"
 DETECTOR                            = None
 VAR_MODEL   : ort.InferenceSession  = None
 PAR_MODEL   : ort.InferenceSession  = None

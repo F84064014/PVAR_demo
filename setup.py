@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     packages=find_packages(),
     package_data={
-        "PVAR_demo": ["samples/*"]
+        "PVAR_demo": ["samples/*/*.png"]
     },
     include_package_data=True,
     install_requires=[

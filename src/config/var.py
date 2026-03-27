@@ -1,6 +1,6 @@
 from pathlib import Path
 
-make = ['Abarth', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'Bentley',
+VEHICLE_MAKE = ['Abarth', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'Bentley',
        'Chevrolet', 'Chrysler', 'Citroen', 'DS', 'Dacia', 'Daihatsu',
        'Dodge', 'Ferrari', 'Fiat', 'Ford', 'Honda', 'Hyundai', 'Infiniti',
        'Isuzu', 'Jaguar', 'Jeep', 'Kia', 'Lamborghini', 'Land Rover',
@@ -9,9 +9,9 @@ make = ['Abarth', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'Bentley',
        'Renault', 'Rolls-Royce', 'Rover', 'SEAT', 'SKODA', 'Saab',
        'Smart', 'Ssangyong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota',
        'Vauxhall', 'Volkswagen', 'Volvo']
-make = [f"Make-{m}" for m in make]
+VEHICLE_MAKE = [f"Make-{m}" for m in VEHICLE_MAKE]
 
-model = ['Abarth_124 Spider', 'Abarth_595', 'Abarth_595C', 'Alfa Romeo_159',
+VEHICLE_MODEL = ['Abarth_124 Spider', 'Abarth_595', 'Abarth_595C', 'Alfa Romeo_159',
        'Alfa Romeo_Brera', 'Alfa Romeo_GT', 'Alfa Romeo_Giulia',
        'Alfa Romeo_Giulietta', 'Alfa Romeo_MiTo', 'Alfa Romeo_Spider',
        'Alfa Romeo_Stelvio', 'Aston Martin_DB11', 'Aston Martin_DB9',
@@ -188,7 +188,7 @@ model = ['Abarth_124 Spider', 'Abarth_595', 'Abarth_595C', 'Alfa Romeo_159',
        'Volvo_V60 Cross Country', 'Volvo_V70', 'Volvo_V90',
        'Volvo_V90 Cross Country', 'Volvo_XC60', 'Volvo_XC70',
        'Volvo_XC90']
-model = [f"Model-{m}" for m in model]
+VEHICLE_MODEL = [f"Model-{m}" for m in VEHICLE_MODEL]
 
 color = [
     "Color-Black",
@@ -203,7 +203,7 @@ color = [
     "Color-Yellow",
 ]
 
-ATTRIBUTES = make + model + color
+ATTRIBUTES = VEHICLE_MAKE + VEHICLE_MODEL + color
 
 def getGroup():
     getGroupName = lambda s: '-'.join(s.split('-')[:-1])
@@ -219,8 +219,12 @@ GRUOPS = getGroup()
 DEMO_IMGS = [str(p) for p in Path("samples/var").glob('*')]
 
 DEMO_MODELS = [
-    "var.onnx"
+    "EMO.onnx",
+    "contras.onnx",
+    "var.onnx",
+    "mobile.onnx",
 ]
+DEMO_MODEL = DEMO_MODELS[0]
 
 VEHICLE_COLOR = {
     0: (  0,   0,   0),  # Black

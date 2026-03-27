@@ -10,11 +10,13 @@ import gradio as gr
 import numpy as np
 from pathlib import Path
 from PIL import Image
+from functools import partial
 
 from ultralytics import YOLO    
 import onnxruntime as ort
 import config.par as PAR_CFG
 import config.var as VAR_CFG
+import plot as VPAR_plot
 
 ## Define Global Variables
 MODEL_ROOT  : Path = Path(__file__).parent.parent / "models"
@@ -26,28 +28,32 @@ def load_detector():
     global DETECTOR
     if DETECTOR is None:
         DETECTOR = YOLO(MODEL_ROOT / "detect" / "yolo26l.pt")
+        DETECTOR = DETECTOR.to("cuda" if torch.cuda.is_available() else "cpu")
 
-def load_var():
+def load_var(force=False):
     global VAR_MODEL
-    if VAR_MODEL is None:
-        path = MODEL_ROOT / "var" / VAR_CFG.DEMO_MODELS[0]
+    if force or VAR_MODEL is None:
+        path = MODEL_ROOT / "var" / VAR_CFG.DEMO_MODEL
         if not path.exists():
             print(f"Model not found at {path}!!")
-        VAR_MODEL = ort.InferenceSession(MODEL_ROOT / "var" / VAR_CFG.DEMO_MODELS[0])
+        VAR_MODEL = ort.InferenceSession(MODEL_ROOT / "var" / VAR_CFG.DEMO_MODEL)
+        print(f"[INFO] load model {path}")
 
-def load_par():
+def load_par(force=False):
     global PAR_MODEL
-    if PAR_MODEL is None:
-        path = MODEL_ROOT / "par" / PAR_CFG.DEMO_MODELS[0]
+    if force or PAR_MODEL is None:
+        path = MODEL_ROOT / "par" / PAR_CFG.DEMO_MODEL
         if not path.exists():
             print(f"Model not found at {path}!!")
-        PAR_MODEL = ort.InferenceSession(MODEL_ROOT / "par" / PAR_CFG.DEMO_MODELS[0])
+        PAR_MODEL = ort.InferenceSession(MODEL_ROOT / "par" / PAR_CFG.DEMO_MODEL)
+        print(f"[INFO] load model {path}")
 
 def run_var_inference(pil: Image, return_dict=True):
 
     load_var()
 
-    rgb   = cv2.resize(np.array(pil), (224, 224))
+    input_size = VAR_MODEL.get_inputs()[0].shape[-2:][::-1]
+    rgb   = cv2.resize(np.array(pil), input_size)
     rgb   = rgb.astype(np.float32)
     rgb   = rgb.transpose(2, 0, 1)[None]
     probs = VAR_MODEL.run(None, {'input': rgb})[0][0]
@@ -59,7 +65,8 @@ def run_par_inference(pil: Image, return_dict=True):
 
     load_par()
 
-    rgb   = cv2.resize(np.array(pil), (128, 256))
+    input_size = PAR_MODEL.get_inputs()[0].shape[-2:][::-1]
+    rgb   = cv2.resize(np.array(pil), input_size)
     rgb   = rgb.transpose(2, 0, 1)[None]
     probs = PAR_MODEL.run(None, {'input': rgb})[0][0]
     if return_dict:
@@ -108,16 +115,23 @@ def run_video_inference(video_path: str):
                     age_index = np.argmax(probs[:3])
                     upper_color = np.argmax(probs[ 5:15])
                     lower_color = np.argmax(probs[16:26])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color=PAR_CFG.AGE_COLOR[age_index], thickness=2)
-                    cv2.rectangle(frame, (x2+3, y1), (x2+7, (y1+y2)//2), color=PAR_CFG.DRESS_COLOR[upper_color], thickness=3)
-                    cv2.rectangle(frame, (x2+3, (y1+y2)//2), (x2+7, y2), color=PAR_CFG.DRESS_COLOR[lower_color], thickness=3)
+                    gender   = 'F' if probs[3]>probs[4] else 'M'
+                    backpage = 'B' if probs[26]>0.7 else 'X'
+                    bag      = 'B' if probs[27]>0.7 else 'X'
+                    hat      = 'H' if probs[28]>0.7 else 'X'
+                    label    = gender + backpage + bag + hat
+                    VPAR_plot.draw_box(  frame, (x1, y1), (x2, y2), PAR_CFG.AGE_COLOR[age_index])
+                    VPAR_plot.draw_color(frame, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[upper_color], 'top')
+                    VPAR_plot.draw_color(frame, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[lower_color], 'bot')
+                    VPAR_plot.draw_label(frame, (x1, y1), (x2, y2), text=label)
 
                 elif cls in [2, 5, 7]: # Car, Bus, Truck
                     probs = run_var_inference(crop, return_dict=False)
-                    color_index = np.argmax(probs[-10:])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color=(255, 0, 0), thickness=2)
-                    cv2.rectangle(frame, (x2+3, y1), (x2+7, y2), color=VAR_CFG.VEHICLE_COLOR[color_index], thickness=3)
-
+                    model_index = np.argmax(probs[len(VAR_CFG.VEHICLE_MAKE):len(VAR_CFG.VEHICLE_MODEL)])
+                    color_index = np.argmax(probs[-len(VAR_CFG.VEHICLE_COLOR):])
+                    VPAR_plot.draw_box(  frame, (x1, y1), (x2, y2), color=(255, 0, 0))
+                    VPAR_plot.draw_color(frame, (x1, y1), (x2, y2), color=VAR_CFG.VEHICLE_COLOR[color_index])
+                    VPAR_plot.draw_label(frame, (x1, y1), (x2, y2), text=VAR_CFG.VEHICLE_MODEL[model_index])
             out.write(frame)
         
         frame_idx += 1
@@ -133,8 +147,24 @@ def on_par_gallery_select(evt: gr.SelectData):
 def on_var_gallery_select(evt: gr.SelectData):
     return Image.open(VAR_CFG.DEMO_IMGS[evt.index]).convert('RGB')
 
-def on_model_select(model_choice):
+def on_par_model_select(model_choice: str):
+    print(f"[DEBUG] On model select = {model_choice}")
+    PAR_CFG.DEMO_MODEL = model_choice
+    load_par(force=True)
     return None
+
+def on_var_model_select(model_choice: str):
+    print(f"[DEBUG] On model select = {model_choice}")
+    VAR_CFG.DEMO_MODEL = model_choice
+    load_var(force=True)
+    return None
+
+def filter_group(preds, class_list):
+    if preds is None:
+        return {}
+    out = {k: v for k, v in preds.items() if k in class_list}
+    tot = sum(out.values())
+    return {k: v / tot for k, v in out.items()}
 
 # ===== UI =====
 with gr.Blocks() as demo:
@@ -170,14 +200,8 @@ with gr.Blocks() as demo:
                         with gr.Tab(label=group_name):
 
                             par_output = gr.Label(num_top_classes=20)
-
-                            def filter_group(preds, class_list=class_list):
-                                if preds is None:
-                                    return {}
-                                return {k: v for k, v in preds.items() if k in class_list}
-
-                            par_model_input.select(on_model_select, inputs=[par_model_input], outputs=par_output)
-                            par_btn.click(fn=filter_group, inputs=state, outputs=par_output)
+                            par_model_input.change(on_par_model_select, inputs=[par_model_input], outputs=par_output)
+                            par_btn.click(fn=partial(filter_group, class_list=class_list), inputs=state, outputs=par_output)
 
         with gr.Tab("Mode-VAR-Image"):
 
@@ -201,14 +225,8 @@ with gr.Blocks() as demo:
                         with gr.Tab(label=group_name):
 
                             var_output = gr.Label(num_top_classes=20)
-
-                            def filter_group(preds, class_list=class_list):
-                                if preds is None:
-                                    return {}
-                                return {k: v for k, v in preds.items() if k in class_list}
-
-                            var_model_input.select(on_model_select, inputs=[var_model_input], outputs=var_output)
-                            var_btn.click(fn=filter_group, inputs=state, outputs=var_output)
+                            var_model_input.change(on_var_model_select, inputs=[var_model_input], outputs=var_output)
+                            var_btn.click(fn=partial(filter_group, class_list=class_list), inputs=state, outputs=var_output)
 
         # Video mode
         with gr.Tab("Mode-Video"):
@@ -219,4 +237,5 @@ with gr.Blocks() as demo:
 
                 video_btn.click(run_video_inference, inputs=video_input, outputs=video_output)
 
-demo.launch(share=False, debug=True, server_port=7860, server_name="0.0.0.0")
+# demo.launch(share=False, debug=True, server_port=7860, server_name="0.0.0.0")
+demo.launch(share=False)

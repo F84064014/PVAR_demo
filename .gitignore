@@ -5,3 +5,4 @@ temp
 *.pt
 __pycache__
 PVAR_demo.zip
+*.egg-info

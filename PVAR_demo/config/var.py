@@ -9,6 +9,7 @@ VEHICLE_MAKE = ['Abarth', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'Bentley'
        'Renault', 'Rolls-Royce', 'Rover', 'SEAT', 'SKODA', 'Saab',
        'Smart', 'Ssangyong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota',
        'Vauxhall', 'Volkswagen', 'Volvo']
+VEHICLE_MAKE = VEHICLE_MAKE + list(range(67 - len(VEHICLE_MAKE)))
 VEHICLE_MAKE = [f"Make-{m}" for m in VEHICLE_MAKE]
 
 VEHICLE_MODEL = ['Abarth_124 Spider', 'Abarth_595', 'Abarth_595C', 'Alfa Romeo_159',
@@ -188,6 +189,7 @@ VEHICLE_MODEL = ['Abarth_124 Spider', 'Abarth_595', 'Abarth_595C', 'Alfa Romeo_1
        'Volvo_V60 Cross Country', 'Volvo_V70', 'Volvo_V90',
        'Volvo_V90 Cross Country', 'Volvo_XC60', 'Volvo_XC70',
        'Volvo_XC90']
+VEHICLE_MODEL = VEHICLE_MODEL + list(range(897 - len(VEHICLE_MODEL)))
 VEHICLE_MODEL = [f"Model-{m}" for m in VEHICLE_MODEL]
 
 color = [
@@ -219,6 +221,8 @@ GRUOPS = getGroup()
 DEMO_IMGS = [str(p) for p in (Path(__file__).parent.parent / 'samples' / 'var').glob('*')]
 
 DEMO_MODELS = list(map(lambda s: str(s.name), (Path(__file__).parent.parent / 'models' / 'var').iterdir()))
+DEMO_MODELS.append("AMBA.bin")
+print("VAR Available Models = ", DEMO_MODELS)
 DEMO_MODEL = DEMO_MODELS[0]
 
 VEHICLE_COLOR = {

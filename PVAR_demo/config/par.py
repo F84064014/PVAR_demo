@@ -2,8 +2,8 @@ from pathlib import Path
 
 ATTRIBUTES = [
     "Age-Young", "Age-Adult", "Age-Old",
-    "Gender-Male",
     "Gender-Female",
+    "Gender-Male",
     "UpperBody-Color-Black", "UpperBody-Color-Blue",   "UpperBody-Color-Brown",
     "UpperBody-Color-Green", "UpperBody-Color-Grey",   "UpperBody-Color-Orange",
     "UpperBody-Color-Pink",  "UpperBody-Color-Purple", "UpperBody-Color-Red",
@@ -29,7 +29,8 @@ GRUOPS = getGroup()
 DEMO_IMGS = [str(p) for p in (Path(__file__).parent.parent / 'samples' / 'par').glob('*')]
 
 DEMO_MODELS = list(map(lambda s: str(s.name), (Path(__file__).parent.parent / 'models' / 'par').iterdir()))
-print(DEMO_MODELS)
+DEMO_MODELS.append("AMBA.bin")
+print("PAR Available Models =" ,DEMO_MODELS)
 DEMO_MODEL = DEMO_MODELS[0]
 
 DRESS_COLOR = {

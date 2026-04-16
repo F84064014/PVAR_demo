@@ -16,7 +16,12 @@ from ultralytics import YOLO
 import onnxruntime as ort
 import PVAR_demo.config.par as PAR_CFG
 import PVAR_demo.config.var as VAR_CFG
+import PVAR_demo.config.device as DEVICE_CFG
 import PVAR_demo.plot as VPAR_plot
+from .inference import (
+    run_device_inference,
+    run_host_inference,
+)
 
 ## Define Global Variables
 MODEL_ROOT  : Path = Path(__file__).parent / "models"
@@ -39,6 +44,8 @@ def load_detector():
 def load_var(force=False):
     global VAR_MODEL
     if force or VAR_MODEL is None:
+        if VAR_CFG.DEMO_MODEL.endswith(".bin"):
+            return
         path  = MODEL_ROOT  / "var" / VAR_CFG.DEMO_MODEL
         if not path.exists():
             path = MODEL_ROOT2 / "var" / VAR_CFG.DEMO_MODEL
@@ -50,6 +57,8 @@ def load_var(force=False):
 def load_par(force=False):
     global PAR_MODEL
     if force or PAR_MODEL is None:
+        if PAR_CFG.DEMO_MODEL.endswith(".bin"):
+            return
         path = MODEL_ROOT / "par" / PAR_CFG.DEMO_MODEL
         if not path.exists():
             path = MODEL_ROOT2 / "par" / PAR_CFG.DEMO_MODEL
@@ -58,15 +67,19 @@ def load_par(force=False):
         PAR_MODEL = ort.InferenceSession(str(path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
         print(f"[INFO] load model {path}")
 
+def set_device(name, value):
+    global DEVICE_CFG
+    setattr(DEVICE_CFG, name, value)
+
 def run_var_inference(pil: Image, return_dict=True):
 
     load_var()
 
-    input_size = VAR_MODEL.get_inputs()[0].shape[-2:][::-1]
-    rgb   = cv2.resize(np.array(pil), input_size)
-    rgb   = rgb.astype(np.float32)
-    rgb   = rgb.transpose(2, 0, 1)[None]
-    probs = VAR_MODEL.run(None, {'input': rgb})[0][0]
+    if VAR_CFG.DEMO_MODEL.endswith(".bin"):
+        probs = run_device_inference(pil, "VARNet.cgi", DEVICE_CFG)
+    else:
+        probs = run_host_inference(pil, VAR_MODEL, dtype=np.float32)
+
     if return_dict:
         return dict(zip(VAR_CFG.ATTRIBUTES, probs))
     return probs
@@ -75,10 +88,13 @@ def run_par_inference(pil: Image, return_dict=True):
 
     load_par()
 
-    input_size = PAR_MODEL.get_inputs()[0].shape[-2:][::-1]
-    rgb   = cv2.resize(np.array(pil), input_size)
-    rgb   = rgb.transpose(2, 0, 1)[None]
-    probs = PAR_MODEL.run(None, {'input': rgb})[0][0]
+    if PAR_CFG.DEMO_MODEL.endswith(".bin"):
+        # REMOTE device AMBA-cavalry inference
+        probs = run_device_inference(pil, "PARNet.cgi", DEVICE_CFG)
+    else:        
+        # HOST device onnixruntime inference
+        probs = run_host_inference(pil, PAR_MODEL)
+
     if return_dict:
         return dict(zip(PAR_CFG.ATTRIBUTES, probs))
     return probs
@@ -193,7 +209,7 @@ def filter_group(preds, class_list):
     if preds is None:
         return {}
     out = {k: v for k, v in preds.items() if k in class_list}
-    tot = sum(out.values())
+    tot = sum(out.values()) + 1e-6
     return {k: v / tot for k, v in out.items()}
 
 # ===== UI =====
@@ -205,11 +221,27 @@ with gr.Blocks() as demo:
     gr.Markdown("### Hint\n"
                 "- 模型會從 [working_dir]/demo_models/par 跟 [working_dir]/demo_models/var 或是預設路徑讀取\n"
                 "- Video Inference 後會將crop直接更新到 PAR/VAR Gallery\n"
-                "- ultralytics預設會下載 torch-cpu 有需要請更新 torch-gpu")
+                "- ultralytics預設會下載 torch-cpu 有需要請更新 torch-gpu\n"
+                "- 2026/04/14 新增 AMBA SoC remote model, 請再 model 選擇 AMBA.bin:\n"
+                "   1. `git clone https://dynagitlab.dynacolor.com.tw/AaronChu/ambabenchmark.git`\n"
+                "   2. cd build && cmake --build . && cmake --bulid . --target upload\n"
+                "   3. 開啟 talent 後 `cd /tmp/app/va && PARNet Daemon`\n"
+                "   4. 選擇模型 AMBA.bin")
 
     state = gr.State()
     par_model_input = gr.Dropdown(choices=PAR_CFG.DEMO_MODELS, label="選擇PAR模型", interactive=True)
     var_model_input = gr.Dropdown(choices=VAR_CFG.DEMO_MODELS, label="選擇VAR模型", interactive=True)
+    with gr.Row():
+        ip = gr.Textbox(label="IP Address",
+                        placeholder=DEVICE_CFG.DEVICE_IP)
+        username = gr.Textbox(label="User",
+                              placeholder=DEVICE_CFG.DEVICE_USERNAME)
+        password = gr.Textbox(label="Password", type="password",
+                              placeholder=DEVICE_CFG.DEVICE_PASSWORD)
+
+        ip.change(lambda s: set_device('DEVICE_IP', s), inputs=ip)
+        username.change(lambda s: set_device('DEVICE_USERNAME', s), inputs=username)
+        password.change(lambda s: set_device('DEVICE_PASSWORD', s), inputs=password)
 
     with gr.Tabs():
 

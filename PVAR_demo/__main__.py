@@ -100,7 +100,55 @@ def run_par_inference(pil: Image, return_dict=True):
     return probs
 
 @torch.no_grad()
-def run_video_inference(video_path: str, conf: float, rate: int, par: bool, var: bool):
+def run_batch_inference(frame_img_buffer: list[np.ndarray], conf,
+                        par, par_crops, var, var_crops):
+    global DETECTOR
+
+    results = DETECTOR(frame_img_buffer, classes=[0, 2, 5, 7], conf=conf, verbose=False)
+    frame_view_buffer = []
+
+    for frame_img, det in zip(frame_img_buffer, results):
+
+        # For display and show (frame MUST be read only)
+        frame_view = frame_img.copy()
+
+        clss  = det.boxes.cls.cpu().numpy().astype(int)
+        boxes = det.boxes.xyxy.cpu().numpy()
+        for box, cls in zip(boxes, clss):
+            x1, y1, x2, y2 = box.astype(int)
+            crop = Image.fromarray(frame_img[y1:y2, x1:x2, ::-1])
+
+            if par and cls in [0]: # Human
+                par_crops.append(crop)
+                probs = run_par_inference(crop, return_dict=False)
+                age_index = np.argmax(probs[:3])
+                upper_color = np.argmax(probs[ 5:15])
+                lower_color = np.argmax(probs[16:26])
+                gender   = 'F' if probs[3]>probs[4] else 'M'
+                backpage = 'B' if probs[26]>0.7 else 'X'
+                bag      = 'B' if probs[27]>0.7 else 'X'
+                hat      = 'H' if probs[28]>0.7 else 'X'
+                label    = gender + backpage + bag + hat
+                VPAR_plot.draw_box(  frame_view, (x1, y1), (x2, y2), PAR_CFG.AGE_COLOR[age_index])
+                VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[upper_color], 'top')
+                VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[lower_color], 'bot')
+                VPAR_plot.draw_label(frame_view, (x1, y1), (x2, y2), text=label)
+
+            elif var and cls in [2, 5, 7]: # Car, Bus, Truck
+                var_crops.append(crop)
+                probs = run_var_inference(crop, return_dict=False)
+                model_index = np.argmax(probs[len(VAR_CFG.VEHICLE_MAKE):len(VAR_CFG.VEHICLE_MODEL)])
+                color_index = np.argmax(probs[-len(VAR_CFG.VEHICLE_COLOR):])
+                VPAR_plot.draw_box(  frame_view, (x1, y1), (x2, y2), color=(255, 0, 0))
+                VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), color=VAR_CFG.VEHICLE_COLOR[color_index])
+                VPAR_plot.draw_label(frame_view, (x1, y1), (x2, y2), text=VAR_CFG.VEHICLE_MODEL[model_index])
+
+        frame_view_buffer.append(frame_view)
+
+    return frame_view_buffer
+
+@torch.no_grad()
+def run_video_inference(video_path: str, conf: float, rate: int, batch: int, par: bool, var: bool):
     if video_path is None:
         return None
 
@@ -117,58 +165,48 @@ def run_video_inference(video_path: str, conf: float, rate: int, par: bool, var:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     N = rate # predict every N frame
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # mp4 編碼
-    out_path = str(Path.cwd() / "PVAR_demo_video" / f"Video.PAR={PAR_CFG.DEMO_MODEL}.VAR={VAR_CFG.DEMO_MODEL}.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+
+    out_path = str(Path.cwd() / "PVAR_demo_video" /
+                   f"Video.PAR={PAR_CFG.DEMO_MODEL}.VAR={VAR_CFG.DEMO_MODEL}.mp4")
     Path(out_path).parent.mkdir(exist_ok=True)
+
     out = cv2.VideoWriter(out_path, fourcc, fps // N, (width, height))
 
     par_crops = [] # collect crop image for gallery
     var_crops = []
 
     frame_idx = 0
+    frame_img_buffer = []
+    frame_idx_buffer = []
+    frame_batch_size = batch
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # For display and show (frame MUST be read only)
-        frame_view = frame.copy()
-
         if frame_idx % N == 0:
-            results = DETECTOR(frame, classes=[0, 2, 5, 7], conf=conf)
-            clss  = results[0].boxes.cls.cpu().numpy().astype(int)
-            boxes = results[0].boxes.xyxy.cpu().numpy()
-            for box, cls in zip(boxes, clss):
-                x1, y1, x2, y2 = box.astype(int)
-                crop = Image.fromarray(frame[y1:y2, x1:x2, ::-1])
+            frame_img_buffer.append(frame)
+            frame_idx_buffer.append(frame_idx)
 
-                if par and cls in [0]: # Human
-                    par_crops.append(crop)
-                    probs = run_par_inference(crop, return_dict=False)
-                    age_index = np.argmax(probs[:3])
-                    upper_color = np.argmax(probs[ 5:15])
-                    lower_color = np.argmax(probs[16:26])
-                    gender   = 'F' if probs[3]>probs[4] else 'M'
-                    backpage = 'B' if probs[26]>0.7 else 'X'
-                    bag      = 'B' if probs[27]>0.7 else 'X'
-                    hat      = 'H' if probs[28]>0.7 else 'X'
-                    label    = gender + backpage + bag + hat
-                    VPAR_plot.draw_box(  frame_view, (x1, y1), (x2, y2), PAR_CFG.AGE_COLOR[age_index])
-                    VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[upper_color], 'top')
-                    VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), PAR_CFG.DRESS_COLOR[lower_color], 'bot')
-                    VPAR_plot.draw_label(frame_view, (x1, y1), (x2, y2), text=label)
+        if len(frame_img_buffer) == frame_batch_size:
+            frame_view_buffer = run_batch_inference(frame_img_buffer, conf,
+                                                    par, par_crops, var, var_crops)
+            for frame_view in frame_view_buffer:
+                out.write(frame_view)
 
-                elif var and cls in [2, 5, 7]: # Car, Bus, Truck
-                    var_crops.append(crop)
-                    probs = run_var_inference(crop, return_dict=False)
-                    model_index = np.argmax(probs[len(VAR_CFG.VEHICLE_MAKE):len(VAR_CFG.VEHICLE_MODEL)])
-                    color_index = np.argmax(probs[-len(VAR_CFG.VEHICLE_COLOR):])
-                    VPAR_plot.draw_box(  frame_view, (x1, y1), (x2, y2), color=(255, 0, 0))
-                    VPAR_plot.draw_color(frame_view, (x1, y1), (x2, y2), color=VAR_CFG.VEHICLE_COLOR[color_index])
-                    VPAR_plot.draw_label(frame_view, (x1, y1), (x2, y2), text=VAR_CFG.VEHICLE_MODEL[model_index])
-            out.write(frame_view)
+            frame_img_buffer.clear()
+            frame_idx_buffer.clear()
         
         frame_idx += 1
+
+    # Handle Last batch
+    if len(frame_img_buffer):
+        frame_view_buffer = run_batch_inference(frame_img_buffer, conf,
+                                                par, par_crops, var, var_crops)
+        for frame_view in frame_view_buffer:
+            out.write(frame_view)
 
     cap.release()
     out.release()
@@ -295,8 +333,9 @@ with gr.Blocks() as demo:
 
             # Video (option)
             with gr.Row():
-                detect_conf = gr.Number(value=0.3, label="Detect Conf", precision=2)
-                detect_rate = gr.Number(value=  5, label="Detect every N frames", precision=0)
+                detect_conf  = gr.Number(value=0.3, label="Detect Conf", precision=2)
+                detect_rate  = gr.Number(value=  5, label="Detect every N frames", precision=0)
+                detect_batch = gr.Number(value= 16, label="Detect batchsize", precision=0)
                 par_checkbox = gr.Checkbox(value=True, label="Enable PAR")
                 var_checkbox = gr.Checkbox(value=True, label="Enable VAR")
 
@@ -312,7 +351,7 @@ with gr.Blocks() as demo:
                 with gr.Column():
                     crops_output = gr.Gallery(columns=6, height=350)
 
-                video_inference_inputs = [video_input, detect_conf, detect_rate, par_checkbox, var_checkbox]
+                video_inference_inputs = [video_input, detect_conf, detect_rate, detect_batch, par_checkbox, var_checkbox]
                 video_btn.click(run_video_inference, inputs=video_inference_inputs, outputs=[video_output, par_gallery, var_gallery, crops_output])
 
 if __name__=="__main__":
